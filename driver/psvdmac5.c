@@ -217,8 +217,97 @@ int _sceSblSsMgrAESECBEncryptWithKeygenForDriverProxy(sceSblSsMgrAESECBWithKeyge
 
 int _sceSblSsMgrAESECBDecryptWithKeygenForDriverProxy(sceSblSsMgrAESECBWithKeygenForDriverProxy_args* args)
 {
-  //unwrap args and call kernel function
-  return 0;
+  //copy arguments to kernel
+  sceSblSsMgrAESECBWithKeygenForDriverProxy_args kargs;
+  int res0 = ksceKernelMemcpyUserToKernel(&kargs, (uintptr_t)args, sizeof(sceSblSsMgrAESECBWithKeygenForDriverProxy_args));
+  if(res0 < 0)
+    return -1;
+
+  //allocate source buffer
+  SceUID aes_src_uid = ksceKernelAllocMemBlock("aes_src", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.size, NULL);
+  if(aes_src_uid < 0)
+  {
+    return -1;
+  }
+
+  void* aes_src = 0;
+
+  int res1 = ksceKernelGetMemBlockBase(aes_src_uid, &aes_src);
+  if(res1 < 0)
+  {
+    return -1;
+  }
+
+  //allocate dest buffer
+  SceUID aes_dst_uid = ksceKernelAllocMemBlock("aes_dst", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.size, NULL);
+  if(aes_dst_uid < 0)
+  {
+    ksceKernelFreeMemBlock(aes_src_uid);
+    return -1;
+  }
+
+  void* aes_dst = 0;
+
+  int res2 = ksceKernelGetMemBlockBase(aes_dst_uid, &aes_dst);
+  if(res2 < 0)
+  {
+    ksceKernelFreeMemBlock(aes_src_uid);
+    return -1;
+  }
+
+  //allocate key buffer
+  SceUID aes_key_uid = ksceKernelAllocMemBlock("aes_key", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.key_size / 8, NULL);
+  if(aes_key_uid < 0)
+  {
+    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid);
+    return -1;
+  }
+
+  void* aes_key = 0;
+  
+  int res3 = ksceKernelGetMemBlockBase(aes_key_uid, &aes_key);
+  if(res3 < 0)
+  {
+    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid);
+    return -1;
+  }
+
+  //copy source to kernel
+  int res4 = ksceKernelMemcpyUserToKernel(aes_src, (uintptr_t)kargs.src, kargs.size);
+  if(res4 < 0)
+  {
+    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    return -1;
+  }
+
+  //copy key to kernel
+  int res5 = ksceKernelMemcpyUserToKernel(aes_key, (uintptr_t)kargs.key, kargs.key_size / 8);
+  if(res5 < 0)
+  {
+    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    return -1;
+  }
+
+  //call function
+  int result = sceSblSsMgrAESECBDecryptWithKeygenForDriverProxy(aes_src, aes_dst, kargs.size, aes_key, kargs.key_size, kargs.key_id, kargs.mask_enable);
+  if(result < 0)
+  {
+    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    return -1;
+  }
+
+  //copy result to dest
+  int res6 = ksceKernelMemcpyKernelToUser((uintptr_t)kargs.dst, aes_dst, kargs.size);
+  if(res6 < 0)
+  {
+    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    return -1;
+  }
+
+  //deallocate memblocks
+  ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+
+  return result;
 }
 
 int _sceSblSsMgrAESCBCEncryptWithKeygenForDriverProxy(sceSblSsMgrAESCBCWithKeygenForDriverProxy_args* args)
