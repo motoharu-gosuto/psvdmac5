@@ -16,3 +16,9 @@ psvkirk:
         - sceSblSsMgrAESCBCDecryptWithKeygenForDriverProxy
         - sceSblSsMgrHMACSHA1WithKeygenForDriverProxy
         - sceSblSsMgrAESCMACWithKeygenForDriverProxy
+        - _sceSblSsMgrAESECBEncryptWithKeygenForDriverProxy
+        - _sceSblSsMgrAESECBDecryptWithKeygenForDriverProxy
+        - _sceSblSsMgrAESCBCEncryptWithKeygenForDriverProxy
+        - _sceSblSsMgrAESCBCDecryptWithKeygenForDriverProxy
+        - _sceSblSsMgrHMACSHA1WithKeygenForDriverProxy
+        - _sceSblSsMgrAESCMACWithKeygenForDriverProxy
