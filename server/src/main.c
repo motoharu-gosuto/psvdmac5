@@ -168,6 +168,16 @@ typedef struct command_1_response
 typedef struct command_2_request
 {
   int command;
+
+  int encrypt;
+
+  int size;
+  int key_size;
+  uint16_t key_id;
+  int mask_enable;
+
+  unsigned char data[]; // src, key
+  
 } command_2_request;
 
 typedef struct command_2_response
@@ -175,11 +185,24 @@ typedef struct command_2_response
     int command;
     int vita_err;
     int proxy_err;
+
+    unsigned char data[]; // dst
+
 } command_2_response;
 
 typedef struct command_3_request
 {
   int command;
+
+  int encrypt;
+
+  int size;
+  int key_size;
+  uint16_t key_id;
+  int mask_enable;
+
+  unsigned char data[]; // src, key, iv
+  
 } command_3_request;
 
 typedef struct command_3_response
@@ -187,11 +210,22 @@ typedef struct command_3_response
     int command;
     int vita_err;
     int proxy_err;
+
+    unsigned char data[]; // dst
+
 } command_3_response;
 
 typedef struct command_4_request
 {
   int command;
+
+  int size;
+  uint16_t key_id;
+  int mask_enable;
+  int command_bit;
+
+  unsigned char data[]; // src, key, iv
+
 } command_4_request;
 
 typedef struct command_4_response
@@ -199,11 +233,23 @@ typedef struct command_4_response
     int command;
     int vita_err;
     int proxy_err;
+
+    unsigned char data[]; // dst
+
 } command_4_response;
 
 typedef struct command_5_request
 {
   int command;
+
+  int size;
+  int key_size;
+  uint16_t key_id;
+  int mask_enable;
+  int command_bit;
+
+  unsigned char data[]; // src, key, iv
+
 } command_5_request;
 
 typedef struct command_5_response
@@ -211,6 +257,9 @@ typedef struct command_5_response
     int command;
     int vita_err;
     int proxy_err;
+
+    unsigned char data[]; // dst
+
 } command_5_response;
 
 
@@ -242,15 +291,18 @@ int handle_command_2(command_2_request* req)
   sceSblSsMgrAESECBWithKeygenForDriverProxy_args args;
   args.src = 0;
   args.dst = 0;
-  args.size = 0;
+  args.size = req->size;
   args.key = 0;
-  args.key_size = 0;
-  args.key_id = 0;
-  args.mask_enable = 0;
+  args.key_size = req->key_size;
+  args.key_id = req->key_id;
+  args.mask_enable = req->mask_enable;
+
+  //TODO: src, key should be pointed to req.data
+  //TODO: dst should be allocated from heap and then sent in response
   
   command_2_response resp;
 
-  if(1)
+  if(req->encrypt)
   {
     resp.vita_err = _sceSblSsMgrAESECBEncryptWithKeygenForDriverProxy(&args);
   }
@@ -267,16 +319,19 @@ int handle_command_3(command_3_request* req)
   sceSblSsMgrAESCBCWithKeygenForDriverProxy_args args;
   args.src = 0;
   args.dst = 0;
-  args.size = 0;
+  args.size = req->size;
   args.key = 0;
-  args.key_size = 0;
+  args.key_size = req->key_size;
   args.iv = 0;
-  args.key_id = 0;
-  args.mask_enable = 0;
+  args.key_id = req->key_id;
+  args.mask_enable = req->mask_enable;
+
+  //TODO: src, key, iv should be pointed to req.data
+  //TODO: dst should be allocated from heap and then sent in response
   
   command_3_response resp;
 
-  if(1)
+  if(req->encrypt)
   {
     resp.vita_err = _sceSblSsMgrAESCBCEncryptWithKeygenForDriverProxy(&args);
   }
@@ -293,12 +348,15 @@ int handle_command_4(command_4_request* req)
   sceSblSsMgrHMACSHA1WithKeygenForDriverProxy_args args;
   args.src = 0;
   args.dst = 0;
-  args.size = 0;
+  args.size = req->size;
   args.key = 0;
   args.iv = 0;
-  args.key_id = 0;
-  args.mask_enable = 0;
-  args.command_bit = 0;
+  args.key_id = req->key_id;
+  args.mask_enable = req->mask_enable;
+  args.command_bit = req->command_bit;
+
+  //TODO: src, key, iv should be pointed to req.data
+  //TODO: dst should be allocated from heap and then sent in response
 
   command_4_response resp;
   
@@ -312,13 +370,16 @@ int handle_command_5(command_5_request* req)
   sceSblSsMgrAESCMACWithKeygenForDriverProxy_args args;
   args.src = 0;
   args.dst = 0;
-  args.size = 0;
+  args.size = req->size;
   args.key = 0;
-  args.key_size = 0;
+  args.key_size = req->key_size;
   args.iv = 0;
-  args.key_id = 0;
-  args.mask_enable = 0;
-  args.command_bit = 0;
+  args.key_id = req->key_id;
+  args.mask_enable = req->mask_enable;
+  args.command_bit = req->command_bit;
+
+  //TODO: src, key, iv should be pointed to req.data
+  //TODO: dst should be allocated from heap and then sent in response
 
   command_5_response resp;
 
@@ -360,6 +421,8 @@ void receive_commands()
         command_2_request recvBuffer;
         recvBuffer.command = command;
 
+        //TODO: additional data should be read before handling command
+
         handle_command_2(&recvBuffer);
       }
       break;
@@ -367,6 +430,8 @@ void receive_commands()
       {
         command_3_request recvBuffer;
         recvBuffer.command = command;
+
+        //TODO: additional data should be read before handling command
 
         handle_command_3(&recvBuffer);
       }
@@ -376,6 +441,8 @@ void receive_commands()
         command_4_request recvBuffer;
         recvBuffer.command = command;
 
+        //TODO: additional data should be read before handling command
+
         handle_command_4(&recvBuffer);
       }
       break;
@@ -383,6 +450,8 @@ void receive_commands()
       {
         command_5_request recvBuffer;
         recvBuffer.command = command;
+
+        //TODO: additional data should be read before handling command
 
         handle_command_5(&recvBuffer);
       }
