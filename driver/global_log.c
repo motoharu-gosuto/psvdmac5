@@ -10,7 +10,7 @@ char sprintfBuffer[256];
 
 void FILE_GLOBAL_WRITE_LEN(char* msg)
 {
-  SceUID global_log_fd = ksceIoOpen("ux0:dump/psvms.txt", SCE_O_CREAT | SCE_O_APPEND | SCE_O_WRONLY, 0777);
+  SceUID global_log_fd = ksceIoOpen("ux0:dump/psvdmac5.txt", SCE_O_CREAT | SCE_O_APPEND | SCE_O_WRONLY, 0777);
 
   if(global_log_fd >= 0)
   {
