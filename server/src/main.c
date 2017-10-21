@@ -132,6 +132,10 @@ void deinit_net()
 
 #define DMAC5_COMMAND_PING 0
 #define DMAC5_COMMAND_TERM 1
+#define DMAC5_COMMAND_AESECB 2
+#define DMAC5_COMMAND_AESCBC 3
+#define DMAC5_COMMAND_HMACSHA1 4
+#define DMAC5_COMMAND_AESCMAC 5
 
 #pragma pack(push, 1)
 
@@ -161,6 +165,55 @@ typedef struct command_1_response
     char data[10];
 } command_1_response;
 
+typedef struct command_2_request
+{
+  int command;
+} command_2_request;
+
+typedef struct command_2_response
+{
+    int command;
+    int vita_err;
+    int proxy_err;
+} command_2_response;
+
+typedef struct command_3_request
+{
+  int command;
+} command_3_request;
+
+typedef struct command_3_response
+{
+    int command;
+    int vita_err;
+    int proxy_err;
+} command_3_response;
+
+typedef struct command_4_request
+{
+  int command;
+} command_4_request;
+
+typedef struct command_4_response
+{
+    int command;
+    int vita_err;
+    int proxy_err;
+} command_4_response;
+
+typedef struct command_5_request
+{
+  int command;
+} command_5_request;
+
+typedef struct command_5_response
+{
+    int command;
+    int vita_err;
+    int proxy_err;
+} command_5_response;
+
+
 int handle_command_0()
 {
   command_0_response resp;
@@ -182,6 +235,96 @@ int handle_command_1()
   psvDebugScreenPrintf("psvdmac5: execute command 1\n");
 
   return sceNetSend(_cli_sock, &resp, sizeof(command_1_response), 0);
+}
+
+int handle_command_2(command_2_request* req)
+{
+  sceSblSsMgrAESECBWithKeygenForDriverProxy_args args;
+  args.src = 0;
+  args.dst = 0;
+  args.size = 0;
+  args.key = 0;
+  args.key_size = 0;
+  args.key_id = 0;
+  args.mask_enable = 0;
+  
+  command_2_response resp;
+
+  if(1)
+  {
+    resp.vita_err = _sceSblSsMgrAESECBEncryptWithKeygenForDriverProxy(&args);
+  }
+  else
+  {
+    resp.vita_err = _sceSblSsMgrAESECBDecryptWithKeygenForDriverProxy(&args);
+  }
+
+  return 0;
+}
+
+int handle_command_3(command_3_request* req)
+{
+  sceSblSsMgrAESCBCWithKeygenForDriverProxy_args args;
+  args.src = 0;
+  args.dst = 0;
+  args.size = 0;
+  args.key = 0;
+  args.key_size = 0;
+  args.iv = 0;
+  args.key_id = 0;
+  args.mask_enable = 0;
+  
+  command_3_response resp;
+
+  if(1)
+  {
+    resp.vita_err = _sceSblSsMgrAESCBCEncryptWithKeygenForDriverProxy(&args);
+  }
+  else
+  {
+    resp.vita_err = _sceSblSsMgrAESCBCDecryptWithKeygenForDriverProxy(&args);
+  }
+
+  return 0;
+}
+
+int handle_command_4(command_4_request* req)
+{
+  sceSblSsMgrHMACSHA1WithKeygenForDriverProxy_args args;
+  args.src = 0;
+  args.dst = 0;
+  args.size = 0;
+  args.key = 0;
+  args.iv = 0;
+  args.key_id = 0;
+  args.mask_enable = 0;
+  args.command_bit = 0;
+
+  command_4_response resp;
+  
+  resp.vita_err = _sceSblSsMgrHMACSHA1WithKeygenForDriverProxy(&args);
+
+  return 0;
+}
+
+int handle_command_5(command_5_request* req)
+{
+  sceSblSsMgrAESCMACWithKeygenForDriverProxy_args args;
+  args.src = 0;
+  args.dst = 0;
+  args.size = 0;
+  args.key = 0;
+  args.key_size = 0;
+  args.iv = 0;
+  args.key_id = 0;
+  args.mask_enable = 0;
+  args.command_bit = 0;
+
+  command_5_response resp;
+
+  resp.vita_err = _sceSblSsMgrAESCMACWithKeygenForDriverProxy(&args);
+
+  return 0;
 }
 
 void receive_commands()
@@ -212,6 +355,38 @@ void receive_commands()
         return;
       }
       return;
+    case DMAC5_COMMAND_AESECB:
+      {
+        command_2_request recvBuffer;
+        recvBuffer.command = command;
+
+        handle_command_2(&recvBuffer);
+      }
+      break;
+    case DMAC5_COMMAND_AESCBC:
+      {
+        command_3_request recvBuffer;
+        recvBuffer.command = command;
+
+        handle_command_3(&recvBuffer);
+      }
+      break;
+    case DMAC5_COMMAND_HMACSHA1:
+      {
+        command_4_request recvBuffer;
+        recvBuffer.command = command;
+
+        handle_command_4(&recvBuffer);
+      }
+      break;
+    case DMAC5_COMMAND_AESCMAC:
+      {
+        command_5_request recvBuffer;
+        recvBuffer.command = command;
+
+        handle_command_5(&recvBuffer);
+      }
+      break;
     default:
       psvDebugScreenPrintf("psvdmac5: unknown command\n");
       return;
