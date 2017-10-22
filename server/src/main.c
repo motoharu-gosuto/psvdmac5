@@ -8,6 +8,8 @@
 
 #include <psvdmac5.h>
 
+#include "types.h"
+
 #include "debugScreen.h"
 
 //net initialization part is taken from xerpi:
@@ -194,144 +196,11 @@ int deallocate_buffer(SceUID uid)
   return 0;
 }
 
-#define DMAC5_COMMAND_PING 0
-#define DMAC5_COMMAND_TERM 1
-#define DMAC5_COMMAND_AESECB 2
-#define DMAC5_COMMAND_AESCBC 3
-#define DMAC5_COMMAND_HMACSHA1 4
-#define DMAC5_COMMAND_AESCMAC 5
-
-#pragma pack(push, 1)
-
-typedef struct command_0_request
-{
-  int command;
-} command_0_request;
- 
-typedef struct command_0_response
-{
-    int command;
-    int vita_err;
-    int proxy_err;
-    char data[10];
-} command_0_response;
-
-typedef struct command_1_request
-{
-  int command;
-} command_1_request;
-
-typedef struct command_1_response
-{
-    int command;
-    int vita_err;
-    int proxy_err;
-    char data[10];
-} command_1_response;
-
-typedef struct command_2_request
-{
-  int command;
-
-  int encrypt;
-
-  int size;
-  int key_size;
-  uint16_t key_id;
-  int mask_enable;
-
-  unsigned char data[]; // src, key
-  
-} command_2_request;
-
-typedef struct command_2_response
-{
-    int command;
-    int vita_err;
-    int proxy_err;
-
-    unsigned char data[]; // dst
-
-} command_2_response;
-
-typedef struct command_3_request
-{
-  int command;
-
-  int encrypt;
-
-  int size;
-  int key_size;
-  uint16_t key_id;
-  int mask_enable;
-
-  unsigned char data[]; // src, key, iv
-  
-} command_3_request;
-
-typedef struct command_3_response
-{
-    int command;
-    int vita_err;
-    int proxy_err;
-
-    unsigned char data[]; // dst
-
-} command_3_response;
-
-typedef struct command_4_request
-{
-  int command;
-
-  int size;
-  uint16_t key_id;
-  int mask_enable;
-  int command_bit;
-
-  unsigned char data[]; // src, key, iv
-
-} command_4_request;
-
-typedef struct command_4_response
-{
-    int command;
-    int vita_err;
-    int proxy_err;
-
-    unsigned char data[]; // dst
-
-} command_4_response;
-
-typedef struct command_5_request
-{
-  int command;
-
-  int size;
-  int key_size;
-  uint16_t key_id;
-  int mask_enable;
-  int command_bit;
-
-  unsigned char data[]; // src, key, iv
-
-} command_5_request;
-
-typedef struct command_5_response
-{
-    int command;
-    int vita_err;
-    int proxy_err;
-
-    unsigned char data[]; // dst
-
-} command_5_response;
-
-
 int handle_command_0()
 {
   command_0_response resp;
   memset(&resp, 0, sizeof(command_0_response));
-  resp.command = DMAC5_COMMAND_PING;
+  resp.command = PSVDMAC5_COMMAND_PING;
   memcpy(resp.data, "dmac5proxy", 10);
   psvDebugScreenPrintf("psvdmac5: execute command 0\n");
 
@@ -342,7 +211,7 @@ int handle_command_1()
 {
   command_1_response resp;
   memset(&resp, 0, sizeof(command_1_response));
-  resp.command = DMAC5_COMMAND_TERM;
+  resp.command = PSVDMAC5_COMMAND_TERM;
   memcpy(resp.data, "dmac5proxy", 10);
   
   psvDebugScreenPrintf("psvdmac5: execute command 1\n");
@@ -373,6 +242,7 @@ int handle_command_2(command_2_request* req, char* data)
 
   //execute kernel proxy function
   command_2_response resp;
+  resp.command = PSVDMAC5_COMMAND_AESECB;
 
   if(req->encrypt)
     resp.vita_err = _sceSblSsMgrAESECBEncryptWithKeygenForDriverProxy(&args);
@@ -571,39 +441,39 @@ void receive_commands()
 	  
     switch(command)
     {
-    case DMAC5_COMMAND_PING:
+    case PSVDMAC5_COMMAND_PING:
       if(handle_command_0() < 0)
       {
         psvDebugScreenPrintf("psvdmac5: failed to handle command 0\n");
         return;
       }
       break;
-    case DMAC5_COMMAND_TERM:
+    case PSVDMAC5_COMMAND_TERM:
       if(handle_command_1() < 0)
       {
         psvDebugScreenPrintf("psvdmac5: failed to handle command 1\n");
         return;
       }
       return;
-    case DMAC5_COMMAND_AESECB:
+    case PSVDMAC5_COMMAND_AESECB:
       {
         if(handle_command_2_base(command) < 0)
           return;
       }
       break;
-    case DMAC5_COMMAND_AESCBC:
+    case PSVDMAC5_COMMAND_AESCBC:
       {
         if(handle_command_3_base(command) < 0)
           return;
       }
       break;
-    case DMAC5_COMMAND_HMACSHA1:
+    case PSVDMAC5_COMMAND_HMACSHA1:
       {
         if(handle_command_4_base(command) < 0)
           return;
       }
       break;
-    case DMAC5_COMMAND_AESCMAC:
+    case PSVDMAC5_COMMAND_AESCMAC:
       {
         if(handle_command_5_base(command) < 0)
           return;
