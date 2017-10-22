@@ -8,7 +8,7 @@
 #include "Dmac5ClientTypes.h"
 #include "Dmac5ClientAPI.h"
 
-int send_data(SOCKET socket, unsigned char* src, int size)
+int send_data(SOCKET socket, const unsigned char* src, int size)
 {
    int bytesToSend = size;
    int bytesWereSend = 0;
@@ -100,7 +100,7 @@ int Dmac5ExecuteCommand1(SOCKET socket)
    return 0;
 }
 
-int Dmac5ExecuteCommand2(SOCKET socket, int encrypt, int size, int key_size, uint16_t key_id, int mask_enable, unsigned char* src, unsigned char* key, unsigned char* dest)
+int Dmac5ExecuteCommand2(SOCKET socket, int encrypt, int size, int key_size, uint16_t key_id, int mask_enable, const unsigned char* src, const unsigned char* key, unsigned char* dest)
 {
    //check args
    if(src == 0 || dest == 0 || size == 0 || key == 0 || key_size == 0 || mask_enable != 1)
@@ -148,7 +148,7 @@ int Dmac5ExecuteCommand2(SOCKET socket, int encrypt, int size, int key_size, uin
    return 0;
 }
 
-int Dmac5ExecuteCommand3(SOCKET socket, int encrypt, int size, int key_size, uint16_t key_id, int mask_enable, unsigned char* src, unsigned char* key, unsigned char* iv, unsigned char* dest)
+int Dmac5ExecuteCommand3(SOCKET socket, int encrypt, int size, int key_size, uint16_t key_id, int mask_enable, const unsigned char* src, const unsigned char* key, unsigned char* iv, unsigned char* dest)
 {
    //check args
    if(src == 0 || dest == 0 || size == 0 || key == 0 || key_size == 0 || iv == 0 || mask_enable != 1)
@@ -202,7 +202,7 @@ int Dmac5ExecuteCommand3(SOCKET socket, int encrypt, int size, int key_size, uin
    return 0;
 }
 
-int Dmac5ExecuteCommand4(SOCKET socket, int size, uint16_t key_id, int mask_enable, int command_bit, unsigned char* src, unsigned char* key, unsigned char* dest)
+int Dmac5ExecuteCommand4(SOCKET socket, int size, uint16_t key_id, int mask_enable, int command_bit, const unsigned char* src, const unsigned char* key, unsigned char* dest)
 {
    //check args
    if(src == 0 || dest == 0 || size == 0 || key == 0 || mask_enable != 1 || command_bit != 0)
@@ -249,7 +249,7 @@ int Dmac5ExecuteCommand4(SOCKET socket, int size, uint16_t key_id, int mask_enab
    return 0;
 }
 
-int Dmac5ExecuteCommand5(SOCKET socket, int size, int key_size, uint16_t key_id, int mask_enable, int command_bit, unsigned char* src, unsigned char* key, unsigned char* dest)
+int Dmac5ExecuteCommand5(SOCKET socket, int size, int key_size, uint16_t key_id, int mask_enable, int command_bit, const unsigned char* src, const unsigned char* key, unsigned char* dest)
 {
    //check args
    if(src == 0 || dest == 0 || size == 0 || key == 0 || key_size == 0 || mask_enable != 1)
@@ -299,36 +299,36 @@ int Dmac5ExecuteCommand5(SOCKET socket, int size, int key_size, uint16_t key_id,
 
 //---
 
-int dmac5::sceSblSsMgrAESECBEncryptWithKeygen(SOCKET socket, unsigned char *src, unsigned char *dst, int size, unsigned char *key, int key_size, uint16_t key_id, int mask_enable)
+int dmac5::sceSblSsMgrAESECBEncryptWithKeygen(SOCKET socket, const unsigned char *src, unsigned char *dst, int size, const unsigned char *key, int key_size, uint16_t key_id, int mask_enable)
 {
    return Dmac5ExecuteCommand2(socket, 1, size, key_size, key_id, mask_enable, src,key, dst);
 }
 
-int dmac5::sceSblSsMgrAESECBDecryptWithKeygen(SOCKET socket, unsigned char *src, unsigned char *dst, int size, unsigned char *key, int key_size, uint16_t key_id, int mask_enable)
+int dmac5::sceSblSsMgrAESECBDecryptWithKeygen(SOCKET socket, const unsigned char *src, unsigned char *dst, int size, const unsigned char *key, int key_size, uint16_t key_id, int mask_enable)
 {
    return Dmac5ExecuteCommand2(socket, 0, size, key_size, key_id, mask_enable, src,key, dst);
 }
 
 //---
 
-int dmac5::sceSblSsMgrAESCBCEncryptWithKeygen(SOCKET socket, unsigned char *src, unsigned char *dst, int size, unsigned char *key, int key_size, unsigned char *iv, uint16_t key_id, int mask_enable)
+int dmac5::sceSblSsMgrAESCBCEncryptWithKeygen(SOCKET socket, const unsigned char *src, unsigned char *dst, int size, const unsigned char *key, int key_size, unsigned char *iv, uint16_t key_id, int mask_enable)
 {
    return Dmac5ExecuteCommand3(socket, 1, size,key_size, key_id, mask_enable, src, key, iv, dst);
 }
 
-int dmac5::sceSblSsMgrAESCBCDecryptWithKeygen(SOCKET socket, unsigned char *src, unsigned char *dst, int size, unsigned char *key, int key_size, unsigned char *iv, uint16_t key_id, int mask_enable)
+int dmac5::sceSblSsMgrAESCBCDecryptWithKeygen(SOCKET socket, const unsigned char *src, unsigned char *dst, int size, const unsigned char *key, int key_size, unsigned char *iv, uint16_t key_id, int mask_enable)
 {
    return Dmac5ExecuteCommand3(socket, 0, size, key_size, key_id, mask_enable, src, key, iv, dst);
 }
 
 //---
 
-int dmac5::sceSblSsMgrHMACSHA1WithKeygen(SOCKET socket, unsigned char *src, unsigned char *dst, int size, unsigned char *key, unsigned char *iv, uint16_t key_id, int mask_enable, int command_bit)
+int dmac5::sceSblSsMgrHMACSHA1WithKeygen(SOCKET socket, const unsigned char *src, unsigned char *dst, int size, const unsigned char *key, unsigned char *iv, uint16_t key_id, int mask_enable, int command_bit)
 {
    return Dmac5ExecuteCommand4(socket, size, key_id, mask_enable, command_bit, src, key, dst);
 }
 
-int dmac5::sceSblSsMgrAESCMACWithKeygen(SOCKET socket, unsigned char *src, unsigned char *dst, int size, unsigned char *key, int key_size, unsigned char *iv, uint16_t key_id, int mask_enable, int command_bit)
+int dmac5::sceSblSsMgrAESCMACWithKeygen(SOCKET socket, const unsigned char *src, unsigned char *dst, int size, const unsigned char *key, int key_size, unsigned char *iv, uint16_t key_id, int mask_enable, int command_bit)
 {
    return Dmac5ExecuteCommand5(socket, size, key_size, key_id, mask_enable, command_bit, src, key, dst);
 }
