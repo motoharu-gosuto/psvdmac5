@@ -17,7 +17,8 @@ add_library (${PROJECT} STATIC ${HEADER_FILES} ${SOURCE_FILES})
 install(TARGETS ${PROJECT}
         DESTINATION "lib"
         )
-install(FILES ${HEADER_FILES}
+install(FILES "../Dmac5ClientAPI.h"
+              "../Dmac5Client.h"
         DESTINATION "include"
         )
 
