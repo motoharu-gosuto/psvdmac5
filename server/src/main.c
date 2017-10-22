@@ -24,6 +24,8 @@
 //http://matrixsust.blogspot.ru/2011/10/basic-tcp-server-client.html
 //http://www.linuxhowtos.org/C_C++/socket.htm
 
+char sprintfBuffer[256];
+
 #define NET_INIT_SIZE 1*1024*1024
 
 int _dmac5_sock = 0;
@@ -132,13 +134,13 @@ void deinit_net()
   }
 }
 
-int send_data(char* src, int size)
+int send_data(unsigned char* src, int size)
 {
   int bytesToSend = size;
   int bytesWereSend = 0;
   while(bytesWereSend != bytesToSend)
   {
-     int sendLen = sceNetSend(_cli_sock, src + bytesWereSend, bytesToSend - bytesWereSend, 0);
+     int sendLen = sceNetSend(_cli_sock, (char*)(src + bytesWereSend), bytesToSend - bytesWereSend, 0);
      if(sendLen <= 0)
      {
         psvDebugScreenPrintf("psvdmac5: failed to send data\n");
@@ -150,13 +152,13 @@ int send_data(char* src, int size)
   return 0;
 }
 
-int recv_data(char* dest, int size)
+int recv_data(unsigned char* dest, int size)
 {
   int bytesToReceive = size;
   int bytesWereReceived = 0;
   while(bytesWereReceived != bytesToReceive)
   {
-     int recvLen = sceNetRecv(_cli_sock, dest + bytesWereReceived, bytesToReceive - bytesWereReceived, 0);
+     int recvLen = sceNetRecv(_cli_sock, (char*)(dest + bytesWereReceived), bytesToReceive - bytesWereReceived, 0);
      if(recvLen <= 0)
      {
        psvDebugScreenPrintf("psvdmac5: failed to receive data\n");
@@ -167,12 +169,17 @@ int recv_data(char* dest, int size)
   return 0;
 }
 
-int allocate_buffer(char* name, int size, SceUID* uid, char** dest)
+#define ROUNDUP(n, width) (((n) + (width) - 1) & (~(unsigned int)((width) - 1)))
+
+#define ONE_MB_SIZE (1024 * 1024)
+
+int allocate_buffer(char* name, int size, SceUID* uid, unsigned char** dest)
 {
-   *uid = sceKernelAllocMemBlock(name, SCE_KERNEL_MEMBLOCK_TYPE_USER_RW, size, 0);
+   *uid = sceKernelAllocMemBlock(name, SCE_KERNEL_MEMBLOCK_TYPE_USER_RW, ROUNDUP(size, ONE_MB_SIZE), 0);
    if(*uid < 0)
    {
-     psvDebugScreenPrintf("psvdmac5: failed to allocate buffer\n");
+     snprintf(sprintfBuffer, 256, "psvdmac5: failed to allocate buffer: %x. size: %x\n", *uid, size);
+     psvDebugScreenPrintf(sprintfBuffer);
      return -1;
    }
 
@@ -219,11 +226,11 @@ int handle_command_1()
   return sceNetSend(_cli_sock, &resp, sizeof(command_1_response), 0);
 }
 
-int handle_command_2(command_2_request* req, char* data)
+int handle_command_2(command_2_request* req, unsigned char* data)
 {
   //allocate buffer
   SceUID dest_uid;
-  char* dest_buffer = 0;
+  unsigned char* dest_buffer = 0;
   if(allocate_buffer("dest", req->size, &dest_uid, &dest_buffer) < 0)
   {
     psvDebugScreenPrintf("psvdmac5: failed to allocate dest buffer\n");
@@ -252,17 +259,26 @@ int handle_command_2(command_2_request* req, char* data)
   //exit if proxy call failed
   if(resp.vita_err < 0)
   {
+    snprintf(sprintfBuffer, 256, "psvdmac5: failed to call proxy function: %x\n", resp.vita_err);
+    psvDebugScreenPrintf(sprintfBuffer);
+
     deallocate_buffer(dest_uid);
     return -1;
   }
 
   //send response to client - base data
   if(send_data(((char*)&resp), sizeof(command_2_response)) < 0)
+  {
+    deallocate_buffer(dest_uid);
     return -1;
+  }
 
   //send additional data
   if(send_data(dest_buffer, req->size) < 0)
-    return -1;
+  {
+    deallocate_buffer(dest_uid);
+    return -1;  
+  }
 
   //deallocate buffer
   if(deallocate_buffer(dest_uid) < 0)
@@ -271,7 +287,7 @@ int handle_command_2(command_2_request* req, char* data)
   return 0;
 }
 
-int handle_command_3(command_3_request* req, char* data)
+int handle_command_3(command_3_request* req, unsigned char* data)
 {
   sceSblSsMgrAESCBCWithKeygenForDriverProxy_args args;
   args.src = 0;
@@ -300,7 +316,7 @@ int handle_command_3(command_3_request* req, char* data)
   return 0;
 }
 
-int handle_command_4(command_4_request* req, char* data)
+int handle_command_4(command_4_request* req, unsigned char* data)
 {
   sceSblSsMgrHMACSHA1WithKeygenForDriverProxy_args args;
   args.src = 0;
@@ -322,7 +338,7 @@ int handle_command_4(command_4_request* req, char* data)
   return 0;
 }
 
-int handle_command_5(command_5_request* req, char* data)
+int handle_command_5(command_5_request* req, unsigned char* data)
 {
   sceSblSsMgrAESCMACWithKeygenForDriverProxy_args args;
   args.src = 0;
@@ -367,7 +383,7 @@ int handle_command_2_base(int command)
 
   //allocate data buffer
   int data_size = recvBuffer.size + (recvBuffer.key_size / 8);
-  char* data_dest = 0;
+  unsigned char* data_dest = 0;
   SceUID data_uid = -1;
   
   if(allocate_buffer("data", data_size, &data_uid, &data_dest) < 0)
@@ -375,11 +391,15 @@ int handle_command_2_base(int command)
   
   //receive additional data
   if(recv_data(data_dest, data_size) < 0)
+  {
+    deallocate_buffer(data_uid);
     return -1;
+  }
 
   //handle command
   if(handle_command_2(&recvBuffer, data_dest) < 0)
   {
+    deallocate_buffer(data_uid);
     psvDebugScreenPrintf("psvdmac5: failed to handle command 2\n");
     return -1;
   }
@@ -435,7 +455,7 @@ void receive_commands()
     int recvLen = sceNetRecv(_cli_sock, &command, sizeof(int), 0);
     if(recvLen <= 0)
     {
-      psvDebugScreenPrintf("psvdmac5: failed to receive data\n");
+      psvDebugScreenPrintf("psvdmac5: failed to receive data. client could have disconnected.\n");
       return;
     }
 	  
