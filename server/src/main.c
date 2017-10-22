@@ -419,23 +419,60 @@ int handle_command_4(command_4_request* req, unsigned char* data)
 
 int handle_command_5(command_5_request* req, unsigned char* data)
 {
+  //allocate buffer
+  SceUID dest_uid;
+  unsigned char* dest_buffer = 0;
+  if(allocate_buffer("dest", req->size, &dest_uid, &dest_buffer) < 0)
+  {
+    psvDebugScreenPrintf("psvdmac5: failed to allocate dest buffer\n");
+    return -1;
+  }
+
+  //initialize args
   sceSblSsMgrAESCMACWithKeygenForDriverProxy_args args;
-  args.src = 0;
-  args.dst = 0;
+  args.src = data;
+  args.dst = dest_buffer;
   args.size = req->size;
-  args.key = 0;
+  args.key = data + req->size;
   args.key_size = req->key_size;
   args.iv = 0;
   args.key_id = req->key_id;
   args.mask_enable = req->mask_enable;
   args.command_bit = req->command_bit;
 
-  //TODO: src, key, iv should be pointed to req.data
-  //TODO: dst should be allocated from heap and then sent in response
-
+  //execute kernel proxy function
   command_5_response resp;
-
+  resp.command = PSVDMAC5_COMMAND_AESCMAC;
+  resp.proxy_err = 0;
   resp.vita_err = _sceSblSsMgrAESCMACWithKeygenForDriverProxy(&args);
+
+  //exit if proxy call failed
+  if(resp.vita_err < 0)
+  {
+    snprintf(sprintfBuffer, 256, "psvdmac5: failed to call proxy function: %x\n", resp.vita_err);
+    psvDebugScreenPrintf(sprintfBuffer);
+
+    deallocate_buffer(dest_uid);
+    return -1;
+  }
+
+  //send response to client - base data
+  if(send_data(((char*)&resp), sizeof(command_5_response)) < 0)
+  {
+    deallocate_buffer(dest_uid);
+    return -1;
+  }
+
+  //send additional data - send dest buffer
+  if(send_data(dest_buffer, req->size) < 0)
+  {
+    deallocate_buffer(dest_uid);
+    return -1;  
+  }
+
+  //deallocate buffer
+  if(deallocate_buffer(dest_uid) < 0)
+    return -1;
 
   return 0;
 }
@@ -591,9 +628,45 @@ int handle_command_5_base(int command)
   command_5_request recvBuffer;
   recvBuffer.command = command;
 
-  //TODO: additional data should be read before handling command
+  //receive main data
+  int header_size = sizeof(command_5_request) - sizeof(int);
+  char* header_dest = ((char*)&recvBuffer) + sizeof(int);
+  if(recv_data(header_dest, header_size) < 0)
+    return -1;
 
-  handle_command_5(&recvBuffer, 0);
+  //check arguments
+  if(recvBuffer.size == 0 || recvBuffer.key_size == 0 || recvBuffer.mask_enable != 1 || recvBuffer.command_bit != 0)
+  {
+    psvDebugScreenPrintf("psvdmac5: invalid args in command 5\n");
+    return -1;
+  }
+
+  //allocate data buffer
+  int data_size = recvBuffer.size + (recvBuffer.key_size / 8);
+  unsigned char* data_dest = 0;
+  SceUID data_uid = -1;
+  
+  if(allocate_buffer("data", data_size, &data_uid, &data_dest) < 0)
+    return -1;
+  
+  //receive additional data
+  if(recv_data(data_dest, data_size) < 0)
+  {
+    deallocate_buffer(data_uid);
+    return -1;
+  }
+
+  //handle command
+  if(handle_command_5(&recvBuffer, data_dest) < 0)
+  {
+    deallocate_buffer(data_uid);
+    psvDebugScreenPrintf("psvdmac5: failed to handle command 5\n");
+    return -1;
+  }
+
+  //deallocate buffer
+  if(deallocate_buffer(data_uid) < 0)
+    return -1;
 
   return 0;
 }
