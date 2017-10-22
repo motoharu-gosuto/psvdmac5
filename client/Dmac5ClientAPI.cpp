@@ -4,8 +4,9 @@
 #include <sstream>
 #include <string>
 
-#include "Dmac5ClientAPI.h"
 #include "Dmac5Client.h"
+#include "Dmac5ClientTypes.h"
+#include "Dmac5ClientAPI.h"
 
 int send_data(SOCKET socket, unsigned char* src, int size)
 {

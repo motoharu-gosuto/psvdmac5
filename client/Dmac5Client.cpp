@@ -25,7 +25,7 @@
 #define DEFAULT_PORT "1330"
 #define NODE_NAME "192.168.0.34"
 
-int initialize_dmac5_proxy_connection(SOCKET& ConnectSocket)
+int dmac5::initialize_dmac5_proxy_connection(SOCKET& ConnectSocket)
 {
    std::cout << "Welcome to Dmac5 client" << std::endl;
 
@@ -95,7 +95,7 @@ int initialize_dmac5_proxy_connection(SOCKET& ConnectSocket)
    return 0;
 }
 
-int deinitialize_dmac5_proxy_connection(SOCKET ConnectSocket)
+int dmac5::deinitialize_dmac5_proxy_connection(SOCKET ConnectSocket)
 {
    // shutdown the connection since no more data will be sent
    int iResult = shutdown(ConnectSocket, SD_SEND);

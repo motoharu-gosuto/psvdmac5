@@ -4,7 +4,8 @@ set (PROJECT psvdmac5-cli-lib)
 project (${PROJECT})
 
 FILE (GLOB HEADER_FILES "../Dmac5ClientAPI.h"
-                        "../Dmac5Client.h")
+                        "../Dmac5Client.h"
+                        "../Dmac5ClientTypes.h")
 source_group ("Header Files" FILES ${HEADER_FILES})
 
 FILE (GLOB SOURCE_FILES "../Dmac5ClientAPI.cpp"
