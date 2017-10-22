@@ -360,14 +360,7 @@ int handle_command_3(command_3_request* req, unsigned char* data)
 
 int handle_command_4(command_4_request* req, unsigned char* data)
 {
-  //allocate buffer
-  SceUID dest_uid;
-  unsigned char* dest_buffer = 0;
-  if(allocate_buffer("dest", req->size, &dest_uid, &dest_buffer) < 0)
-  {
-    psvDebugScreenPrintf("psvdmac5: failed to allocate dest buffer\n");
-    return -1;
-  }
+  unsigned char dest_buffer[0x14] = {0};
 
   //initialize args
   sceSblSsMgrHMACSHA1WithKeygenForDriverProxy_args args;
@@ -391,42 +384,27 @@ int handle_command_4(command_4_request* req, unsigned char* data)
   {
     snprintf(sprintfBuffer, 256, "psvdmac5: failed to call proxy function: %x\n", resp.vita_err);
     psvDebugScreenPrintf(sprintfBuffer);
-
-    deallocate_buffer(dest_uid);
     return -1;
   }
 
   //send response to client - base data
   if(send_data(((char*)&resp), sizeof(command_4_response)) < 0)
   {
-    deallocate_buffer(dest_uid);
     return -1;
   }
 
   //send additional data - send dest buffer
-  if(send_data(dest_buffer, req->size) < 0)
+  if(send_data(dest_buffer, 0x14) < 0)
   {
-    deallocate_buffer(dest_uid);
     return -1;  
   }
-
-  //deallocate buffer
-  if(deallocate_buffer(dest_uid) < 0)
-    return -1;
 
   return 0;
 }
 
 int handle_command_5(command_5_request* req, unsigned char* data)
 {
-  //allocate buffer
-  SceUID dest_uid;
-  unsigned char* dest_buffer = 0;
-  if(allocate_buffer("dest", req->size, &dest_uid, &dest_buffer) < 0)
-  {
-    psvDebugScreenPrintf("psvdmac5: failed to allocate dest buffer\n");
-    return -1;
-  }
+  unsigned char dest_buffer[0x10] = {0};
 
   //initialize args
   sceSblSsMgrAESCMACWithKeygenForDriverProxy_args args;
@@ -451,28 +429,20 @@ int handle_command_5(command_5_request* req, unsigned char* data)
   {
     snprintf(sprintfBuffer, 256, "psvdmac5: failed to call proxy function: %x\n", resp.vita_err);
     psvDebugScreenPrintf(sprintfBuffer);
-
-    deallocate_buffer(dest_uid);
     return -1;
   }
 
   //send response to client - base data
   if(send_data(((char*)&resp), sizeof(command_5_response)) < 0)
   {
-    deallocate_buffer(dest_uid);
     return -1;
   }
 
   //send additional data - send dest buffer
-  if(send_data(dest_buffer, req->size) < 0)
+  if(send_data(dest_buffer, 0x10) < 0)
   {
-    deallocate_buffer(dest_uid);
     return -1;  
-  }
-
-  //deallocate buffer
-  if(deallocate_buffer(dest_uid) < 0)
-    return -1;
+  }  
 
   return 0;
 }
