@@ -243,7 +243,7 @@ int Dmac5ExecuteCommand4(SOCKET socket, int size, uint16_t key_id, int mask_enab
    }
 
    //receive additional data - no reason to copy to separate buffer
-   if(recv_data(socket, dest, size) < 0)
+   if(recv_data(socket, dest, 0x14) < 0)
       return -1;
 
    return 0;
@@ -291,7 +291,7 @@ int Dmac5ExecuteCommand5(SOCKET socket, int size, int key_size, uint16_t key_id,
    }
 
    //receive additional data - no reason to copy to separate buffer
-   if(recv_data(socket, dest, size) < 0)
+   if(recv_data(socket, dest, 0x10) < 0)
       return -1;
 
    return 0;
