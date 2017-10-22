@@ -120,87 +120,98 @@ int sceSblSsMgrAESCMACWithKeygenForDriverProxy(unsigned char *src, unsigned char
 
 // ====== user level functions ======
 
+#define ROUNDUP(n, width) (((n) + (width) - 1) & (~(unsigned int)((width) - 1)))
+
+#define ONE_MB_SIZE (1024 * 1024)
+
+int allocate_buffer(char* name, int size, SceUID* uid, unsigned char** dest)
+{
+   *uid = ksceKernelAllocMemBlock(name, SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, ROUNDUP(size, ONE_MB_SIZE), 0);
+   if(*uid < 0)
+   {
+     snprintf(sprintfBuffer, 256, "failed to allocate buffer: %x. size: %x\n", *uid, size);
+     FILE_GLOBAL_WRITE_LEN(sprintfBuffer);
+     return -1;
+   }
+
+   int mem_block_res = ksceKernelGetMemBlockBase(*uid, (void**)dest);
+   if(mem_block_res < 0)
+   {
+    FILE_GLOBAL_WRITE_LEN("failed to get buffer\n");
+     return - 1;
+   }
+
+   return 0;
+}
+
+int deallocate_buffer(SceUID uid)
+{
+  if(ksceKernelFreeMemBlock(uid) < 0)
+  {
+    FILE_GLOBAL_WRITE_LEN("failed to deallocate buffer\n");
+    return - 1;
+  }
+  return 0;
+}
+
 int _sceSblSsMgrAESECBEncryptWithKeygenForDriverProxy(sceSblSsMgrAESECBWithKeygenForDriverProxy_args* args)
 {
+  FILE_GLOBAL_WRITE_LEN("_sceSblSsMgrAESECBEncryptWithKeygenForDriverProxy\n");
+
   //copy arguments to kernel
   sceSblSsMgrAESECBWithKeygenForDriverProxy_args kargs;
   int res0 = ksceKernelMemcpyUserToKernel(&kargs, (uintptr_t)args, sizeof(sceSblSsMgrAESECBWithKeygenForDriverProxy_args));
   if(res0 < 0)
-    return -1;
-
-  //check arguments
-  if(kargs.src == 0)
-    return -1;
-  
-  if(kargs.dst == 0)
-    return -1;
-
-  if(kargs.size == 0)
-    return -1;
-
-  if(kargs.key == 0)
-    return -1;
-
-  if(kargs.key_size == 0)
-    return -1;
-
-  if(kargs.mask_enable != 1)
-    return -1;
-
-  //allocate source buffer
-  SceUID aes_src_uid = ksceKernelAllocMemBlock("aes_src", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.size, NULL);
-  if(aes_src_uid < 0)
   {
+    snprintf(sprintfBuffer, 256, "failed to ksceKernelMemcpyUserToKernel : %x\n", res0);
+    FILE_GLOBAL_WRITE_LEN(sprintfBuffer);
     return -1;
   }
 
-  void* aes_src = 0;
+  //check arguments
+  if(kargs.src == 0 || kargs.dst == 0 || kargs.size == 0 || kargs.key == 0 || kargs.key_size == 0 || kargs.mask_enable != 1)
+  {
+    FILE_GLOBAL_WRITE_LEN("Invalid arguments\n");
+    return -1;
+  }
 
-  int res1 = ksceKernelGetMemBlockBase(aes_src_uid, &aes_src);
-  if(res1 < 0)
+  //allocate source buffer
+  SceUID aes_src_uid = -1;
+  unsigned char* aes_src = 0;
+  if(allocate_buffer("aes_src", kargs.size, &aes_src_uid, &aes_src) < 0)
   {
     return -1;
   }
 
   //allocate dest buffer
-  SceUID aes_dst_uid = ksceKernelAllocMemBlock("aes_dst", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.size, NULL);
-  if(aes_dst_uid < 0)
+  SceUID aes_dst_uid = -1;
+  unsigned char* aes_dst = 0;
+  if(allocate_buffer("aes_dst", kargs.size, &aes_dst_uid, &aes_dst) < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid);
+    deallocate_buffer(aes_src_uid);
     return -1;
   }
-
-  void* aes_dst = 0;
-
-  int res2 = ksceKernelGetMemBlockBase(aes_dst_uid, &aes_dst);
-  if(res2 < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid);
-    return -1;
-  }
-
-  //allocate key buffer
-  SceUID aes_key_uid = ksceKernelAllocMemBlock("aes_key", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.key_size / 8, NULL);
-  if(aes_key_uid < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid);
-    return -1;
-  }
-
-  void* aes_key = 0;
   
-  int res3 = ksceKernelGetMemBlockBase(aes_key_uid, &aes_key);
-  if(res3 < 0)
+  //allocate key buffer
+  SceUID aes_key_uid = -1;
+  unsigned char* aes_key = 0;
+  if(allocate_buffer("aes_key", (kargs.key_size / 8), &aes_key_uid, &aes_key) < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
     return -1;
   }
-
+  
   //copy source to kernel
   int res4 = ksceKernelMemcpyUserToKernel(aes_src, (uintptr_t)kargs.src, kargs.size);
   if(res4 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    snprintf(sprintfBuffer, 256, "failed to ksceKernelMemcpyUserToKernel : %x\n", res4);
+    FILE_GLOBAL_WRITE_LEN(sprintfBuffer);
+
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -208,7 +219,12 @@ int _sceSblSsMgrAESECBEncryptWithKeygenForDriverProxy(sceSblSsMgrAESECBWithKeyge
   int res5 = ksceKernelMemcpyUserToKernel(aes_key, (uintptr_t)kargs.key, kargs.key_size / 8);
   if(res5 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    snprintf(sprintfBuffer, 256, "failed to ksceKernelMemcpyUserToKernel : %x\n", res5);
+    FILE_GLOBAL_WRITE_LEN(sprintfBuffer);
+
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -216,7 +232,12 @@ int _sceSblSsMgrAESECBEncryptWithKeygenForDriverProxy(sceSblSsMgrAESECBWithKeyge
   int result = sceSblSsMgrAESECBEncryptWithKeygenForDriverProxy(aes_src, aes_dst, kargs.size, aes_key, kargs.key_size, kargs.key_id, kargs.mask_enable);
   if(result < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    snprintf(sprintfBuffer, 256, "failed to sceSblSsMgrAESECBEncryptWithKeygenForDriverProxy : %x\n", result);
+    FILE_GLOBAL_WRITE_LEN(sprintfBuffer);
+
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -224,89 +245,68 @@ int _sceSblSsMgrAESECBEncryptWithKeygenForDriverProxy(sceSblSsMgrAESECBWithKeyge
   int res6 = ksceKernelMemcpyKernelToUser((uintptr_t)kargs.dst, aes_dst, kargs.size);
   if(res6 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    snprintf(sprintfBuffer, 256, "failed to ksceKernelMemcpyKernelToUser : %x\n", res6);
+    FILE_GLOBAL_WRITE_LEN(sprintfBuffer);
+
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
   //deallocate memblocks
-  ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+  deallocate_buffer(aes_src_uid);
+  deallocate_buffer(aes_dst_uid);
+  deallocate_buffer(aes_key_uid);
 
   return result;
 }
 
 int _sceSblSsMgrAESECBDecryptWithKeygenForDriverProxy(sceSblSsMgrAESECBWithKeygenForDriverProxy_args* args)
 {
+  FILE_GLOBAL_WRITE_LEN("_sceSblSsMgrAESECBDecryptWithKeygenForDriverProxy\n");
+
   //copy arguments to kernel
   sceSblSsMgrAESECBWithKeygenForDriverProxy_args kargs;
   int res0 = ksceKernelMemcpyUserToKernel(&kargs, (uintptr_t)args, sizeof(sceSblSsMgrAESECBWithKeygenForDriverProxy_args));
   if(res0 < 0)
-    return -1;
-
-  //check arguments
-  if(kargs.src == 0)
-    return -1;
-
-  if(kargs.dst == 0)
-    return -1;
-
-  if(kargs.size == 0)
-    return -1;
-
-  if(kargs.key == 0)
-    return -1;
-
-  if(kargs.key_size == 0)
-    return -1;
-
-  if(kargs.mask_enable != 1)
-    return -1;
-
-  //allocate source buffer
-  SceUID aes_src_uid = ksceKernelAllocMemBlock("aes_src", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.size, NULL);
-  if(aes_src_uid < 0)
   {
+    snprintf(sprintfBuffer, 256, "failed to ksceKernelMemcpyUserToKernel : %x\n", res0);
+    FILE_GLOBAL_WRITE_LEN(sprintfBuffer);
     return -1;
   }
 
-  void* aes_src = 0;
+  //check arguments
+  if(kargs.src == 0 || kargs.dst == 0 || kargs.size == 0 || kargs.key == 0 || kargs.key_size == 0 || kargs.mask_enable != 1)
+  {
+    FILE_GLOBAL_WRITE_LEN("Invalid arguments\n");
+    return -1;
+  }
 
-  int res1 = ksceKernelGetMemBlockBase(aes_src_uid, &aes_src);
-  if(res1 < 0)
+  //allocate source buffer
+  SceUID aes_src_uid = -1;
+  unsigned char* aes_src = 0;
+  if(allocate_buffer("aes_src", kargs.size, &aes_src_uid, &aes_src) < 0)
   {
     return -1;
   }
 
   //allocate dest buffer
-  SceUID aes_dst_uid = ksceKernelAllocMemBlock("aes_dst", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.size, NULL);
-  if(aes_dst_uid < 0)
+  SceUID aes_dst_uid = -1;
+  unsigned char* aes_dst = 0;
+  if(allocate_buffer("aes_dst", kargs.size, &aes_dst_uid, &aes_dst) < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid);
-    return -1;
-  }
-
-  void* aes_dst = 0;
-
-  int res2 = ksceKernelGetMemBlockBase(aes_dst_uid, &aes_dst);
-  if(res2 < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid);
+    deallocate_buffer(aes_src_uid);
     return -1;
   }
 
   //allocate key buffer
-  SceUID aes_key_uid = ksceKernelAllocMemBlock("aes_key", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.key_size / 8, NULL);
-  if(aes_key_uid < 0)
+  SceUID aes_key_uid = -1;
+  unsigned char* aes_key = 0;
+  if(allocate_buffer("aes_key", (kargs.key_size / 8), &aes_key_uid, &aes_key) < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid);
-    return -1;
-  }
-
-  void* aes_key = 0;
-  
-  int res3 = ksceKernelGetMemBlockBase(aes_key_uid, &aes_key);
-  if(res3 < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
     return -1;
   }
 
@@ -314,7 +314,9 @@ int _sceSblSsMgrAESECBDecryptWithKeygenForDriverProxy(sceSblSsMgrAESECBWithKeyge
   int res4 = ksceKernelMemcpyUserToKernel(aes_src, (uintptr_t)kargs.src, kargs.size);
   if(res4 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -322,7 +324,9 @@ int _sceSblSsMgrAESECBDecryptWithKeygenForDriverProxy(sceSblSsMgrAESECBWithKeyge
   int res5 = ksceKernelMemcpyUserToKernel(aes_key, (uintptr_t)kargs.key, kargs.key_size / 8);
   if(res5 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -330,7 +334,9 @@ int _sceSblSsMgrAESECBDecryptWithKeygenForDriverProxy(sceSblSsMgrAESECBWithKeyge
   int result = sceSblSsMgrAESECBDecryptWithKeygenForDriverProxy(aes_src, aes_dst, kargs.size, aes_key, kargs.key_size, kargs.key_id, kargs.mask_enable);
   if(result < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -338,109 +344,67 @@ int _sceSblSsMgrAESECBDecryptWithKeygenForDriverProxy(sceSblSsMgrAESECBWithKeyge
   int res6 = ksceKernelMemcpyKernelToUser((uintptr_t)kargs.dst, aes_dst, kargs.size);
   if(res6 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
   //deallocate memblocks
-  ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+  deallocate_buffer(aes_src_uid);
+  deallocate_buffer(aes_dst_uid);
+  deallocate_buffer(aes_key_uid);
 
   return result;
 }
 
+//---
+
 int _sceSblSsMgrAESCBCEncryptWithKeygenForDriverProxy(sceSblSsMgrAESCBCWithKeygenForDriverProxy_args* args)
 {
+  FILE_GLOBAL_WRITE_LEN("_sceSblSsMgrAESCBCEncryptWithKeygenForDriverProxy\n");
+
   //copy arguments to kernel
   sceSblSsMgrAESCBCWithKeygenForDriverProxy_args kargs;
   int res0 = ksceKernelMemcpyUserToKernel(&kargs, (uintptr_t)args, sizeof(sceSblSsMgrAESCBCWithKeygenForDriverProxy_args));
   if(res0 < 0)
-    return -1;
-
-  //check arguments
-  if(kargs.src == 0)
-    return -1;
-
-  if(kargs.dst == 0)
-    return -1;
-
-  if(kargs.size == 0)
-    return -1;
-
-  if(kargs.key == 0)
-    return -1;
-
-  if(kargs.key_size == 0)
-    return -1;
-
-  if(kargs.iv == 0)
-    return -1;
-    
-  if(kargs.mask_enable != 1)
-    return -1;
-    
-  //allocate source buffer
-  SceUID aes_src_uid = ksceKernelAllocMemBlock("aes_src", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.size, NULL);
-  if(aes_src_uid < 0)
   {
+    snprintf(sprintfBuffer, 256, "failed to ksceKernelMemcpyUserToKernel : %x\n", res0);
+    FILE_GLOBAL_WRITE_LEN(sprintfBuffer);
     return -1;
   }
 
-  void* aes_src = 0;
-
-  int res1 = ksceKernelGetMemBlockBase(aes_src_uid, &aes_src);
-  if(res1 < 0)
+  //check arguments
+  if(kargs.src == 0 || kargs.dst == 0 || kargs.size == 0 || kargs.key == 0 || kargs.key_size == 0 || kargs.iv == 0 || kargs.mask_enable != 1)
+  {
+    FILE_GLOBAL_WRITE_LEN("Invalid arguments\n");
+    return -1;
+  }
+    
+  //allocate source buffer
+  SceUID aes_src_uid = -1;
+  unsigned char* aes_src = 0;
+  if(allocate_buffer("aes_src", kargs.size, &aes_src_uid, &aes_src) < 0)
   {
     return -1;
   }
 
   //allocate dest buffer
-  SceUID aes_dst_uid = ksceKernelAllocMemBlock("aes_dst", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.size, NULL);
-  if(aes_dst_uid < 0)
+  SceUID aes_dst_uid = -1;
+  unsigned char* aes_dst = 0;
+  if(allocate_buffer("aes_dst", kargs.size, &aes_dst_uid, &aes_dst) < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid);
-    return -1;
-  }
-
-  void* aes_dst = 0;
-
-  int res2 = ksceKernelGetMemBlockBase(aes_dst_uid, &aes_dst);
-  if(res2 < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid);
+    deallocate_buffer(aes_src_uid);
     return -1;
   }
 
   //allocate key buffer
-  SceUID aes_key_uid = ksceKernelAllocMemBlock("aes_key", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.key_size / 8, NULL);
-  if(aes_key_uid < 0)
+  SceUID aes_key_uid = -1;
+  unsigned char* aes_key = 0;
+  if(allocate_buffer("aes_key", (kargs.key_size / 8), &aes_key_uid, &aes_key) < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid);
-    return -1;
-  }
-
-  void* aes_key = 0;
-
-  int res3 = ksceKernelGetMemBlockBase(aes_key_uid, &aes_key);
-  if(res3 < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid);
-    return -1;
-  }
-
-  //allocate iv buffer
-  SceUID aes_iv_uid = ksceKernelAllocMemBlock("aes_iv", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, 0x10, NULL);
-  if(aes_iv_uid < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
-    return -1;
-  }
-
-  void* aes_iv = 0;
-
-  int res4 = ksceKernelGetMemBlockBase(aes_iv_uid, &aes_iv);
-  if(res4 < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
     return -1;
   }
 
@@ -448,7 +412,9 @@ int _sceSblSsMgrAESCBCEncryptWithKeygenForDriverProxy(sceSblSsMgrAESCBCWithKeyge
   int res5 = ksceKernelMemcpyUserToKernel(aes_src, (uintptr_t)kargs.src, kargs.size);
   if(res5 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid); ksceKernelFreeMemBlock(aes_iv_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -456,15 +422,21 @@ int _sceSblSsMgrAESCBCEncryptWithKeygenForDriverProxy(sceSblSsMgrAESCBCWithKeyge
   int res6 = ksceKernelMemcpyUserToKernel(aes_key, (uintptr_t)kargs.key, kargs.key_size / 8);
   if(res6 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid); ksceKernelFreeMemBlock(aes_iv_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
+
+  unsigned char aes_iv[0x10] = {0};
 
   //copy iv to kernel
   int res7 = ksceKernelMemcpyUserToKernel(aes_iv, (uintptr_t)kargs.iv, 0x10);
   if(res7 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid); ksceKernelFreeMemBlock(aes_iv_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -472,7 +444,9 @@ int _sceSblSsMgrAESCBCEncryptWithKeygenForDriverProxy(sceSblSsMgrAESCBCWithKeyge
   int result = sceSblSsMgrAESCBCEncryptWithKeygenForDriverProxy(aes_src, aes_dst, kargs.size, aes_key, kargs.key_size, aes_iv, kargs.key_id, kargs.mask_enable);
   if(result < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid); ksceKernelFreeMemBlock(aes_iv_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -480,7 +454,9 @@ int _sceSblSsMgrAESCBCEncryptWithKeygenForDriverProxy(sceSblSsMgrAESCBCWithKeyge
   int res8 = ksceKernelMemcpyKernelToUser((uintptr_t)kargs.dst, aes_dst, kargs.size);
   if(res8 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid); ksceKernelFreeMemBlock(aes_iv_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -488,109 +464,65 @@ int _sceSblSsMgrAESCBCEncryptWithKeygenForDriverProxy(sceSblSsMgrAESCBCWithKeyge
   int res9 = ksceKernelMemcpyKernelToUser((uintptr_t)kargs.iv, aes_iv, 0x10);
   if(res9 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid); ksceKernelFreeMemBlock(aes_iv_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
   //deallocate memblocks
-  ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid); ksceKernelFreeMemBlock(aes_iv_uid);
+  deallocate_buffer(aes_src_uid);
+  deallocate_buffer(aes_dst_uid);
+  deallocate_buffer(aes_key_uid);
 
   return result;
 }
 
 int _sceSblSsMgrAESCBCDecryptWithKeygenForDriverProxy(sceSblSsMgrAESCBCWithKeygenForDriverProxy_args* args)
 {
+  FILE_GLOBAL_WRITE_LEN("_sceSblSsMgrAESCBCDecryptWithKeygenForDriverProxy\n");
+
   //copy arguments to kernel
   sceSblSsMgrAESCBCWithKeygenForDriverProxy_args kargs;
   int res0 = ksceKernelMemcpyUserToKernel(&kargs, (uintptr_t)args, sizeof(sceSblSsMgrAESCBCWithKeygenForDriverProxy_args));
   if(res0 < 0)
+  {
+    snprintf(sprintfBuffer, 256, "failed to ksceKernelMemcpyUserToKernel : %x\n", res0);
+    FILE_GLOBAL_WRITE_LEN(sprintfBuffer);
     return -1;
+  }
  
   //check arguments
-  if(kargs.src == 0)
-    return -1;
-
-  if(kargs.dst == 0)
-    return -1;
-
-  if(kargs.size == 0)
-    return -1;
-
-  if(kargs.key == 0)
-    return -1;
-
-  if(kargs.key_size == 0)
-    return -1;
-
-  if(kargs.iv == 0)
-    return -1;
-    
-  if(kargs.mask_enable != 1)
-    return -1;
-
-  //allocate source buffer
-  SceUID aes_src_uid = ksceKernelAllocMemBlock("aes_src", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.size, NULL);
-  if(aes_src_uid < 0)
+  if(kargs.src == 0 || kargs.dst == 0 || kargs.size == 0 || kargs.key == 0 || kargs.key_size == 0 || kargs.iv == 0 || kargs.mask_enable != 1)
   {
+    FILE_GLOBAL_WRITE_LEN("Invalid arguments\n");
     return -1;
   }
 
-  void* aes_src = 0;
-
-  int res1 = ksceKernelGetMemBlockBase(aes_src_uid, &aes_src);
-  if(res1 < 0)
+  //allocate source buffer
+  SceUID aes_src_uid = -1;
+  unsigned char* aes_src = 0;
+  if(allocate_buffer("aes_src", kargs.size, &aes_src_uid, &aes_src) < 0)
   {
     return -1;
   }
 
   //allocate dest buffer
-  SceUID aes_dst_uid = ksceKernelAllocMemBlock("aes_dst", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.size, NULL);
-  if(aes_dst_uid < 0)
+  SceUID aes_dst_uid = -1;
+  unsigned char* aes_dst = 0;
+  if(allocate_buffer("aes_dst", kargs.size, &aes_dst_uid, &aes_dst) < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid);
-    return -1;
-  }
-
-  void* aes_dst = 0;
-
-  int res2 = ksceKernelGetMemBlockBase(aes_dst_uid, &aes_dst);
-  if(res2 < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid);
+    deallocate_buffer(aes_src_uid);
     return -1;
   }
 
   //allocate key buffer
-  SceUID aes_key_uid = ksceKernelAllocMemBlock("aes_key", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.key_size / 8, NULL);
-  if(aes_key_uid < 0)
+  SceUID aes_key_uid = -1;
+  unsigned char* aes_key = 0;
+  if(allocate_buffer("aes_key", (kargs.key_size / 8), &aes_key_uid, &aes_key) < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid);
-    return -1;
-  }
-
-  void* aes_key = 0;
-
-  int res3 = ksceKernelGetMemBlockBase(aes_key_uid, &aes_key);
-  if(res3 < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid);
-    return -1;
-  }
-
-  //allocate iv buffer
-  SceUID aes_iv_uid = ksceKernelAllocMemBlock("aes_iv", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, 0x10, NULL);
-  if(aes_iv_uid < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
-    return -1;
-  }
-
-  void* aes_iv = 0;
-
-  int res4 = ksceKernelGetMemBlockBase(aes_iv_uid, &aes_iv);
-  if(res4 < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
     return -1;
   }
 
@@ -598,7 +530,9 @@ int _sceSblSsMgrAESCBCDecryptWithKeygenForDriverProxy(sceSblSsMgrAESCBCWithKeyge
   int res5 = ksceKernelMemcpyUserToKernel(aes_src, (uintptr_t)kargs.src, kargs.size);
   if(res5 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid); ksceKernelFreeMemBlock(aes_iv_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -606,15 +540,21 @@ int _sceSblSsMgrAESCBCDecryptWithKeygenForDriverProxy(sceSblSsMgrAESCBCWithKeyge
   int res6 = ksceKernelMemcpyUserToKernel(aes_key, (uintptr_t)kargs.key, kargs.key_size / 8);
   if(res6 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid); ksceKernelFreeMemBlock(aes_iv_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
+
+  unsigned char aes_iv[0x10] = {0};
 
   //copy iv to kernel
   int res7 = ksceKernelMemcpyUserToKernel(aes_iv, (uintptr_t)kargs.iv, 0x10);
   if(res7 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid); ksceKernelFreeMemBlock(aes_iv_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -622,7 +562,9 @@ int _sceSblSsMgrAESCBCDecryptWithKeygenForDriverProxy(sceSblSsMgrAESCBCWithKeyge
   int result = sceSblSsMgrAESCBCDecryptWithKeygenForDriverProxy(aes_src, aes_dst, kargs.size, aes_key, kargs.key_size, aes_iv, kargs.key_id, kargs.mask_enable);
   if(result < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid); ksceKernelFreeMemBlock(aes_iv_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -630,7 +572,9 @@ int _sceSblSsMgrAESCBCDecryptWithKeygenForDriverProxy(sceSblSsMgrAESCBCWithKeyge
   int res8 = ksceKernelMemcpyKernelToUser((uintptr_t)kargs.dst, aes_dst, kargs.size);
   if(res8 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid); ksceKernelFreeMemBlock(aes_iv_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -638,92 +582,57 @@ int _sceSblSsMgrAESCBCDecryptWithKeygenForDriverProxy(sceSblSsMgrAESCBCWithKeyge
   int res9 = ksceKernelMemcpyKernelToUser((uintptr_t)kargs.iv, aes_iv, 0x10);
   if(res9 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid); ksceKernelFreeMemBlock(aes_iv_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
   //deallocate memblocks
-  ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid); ksceKernelFreeMemBlock(aes_iv_uid);
+  deallocate_buffer(aes_src_uid);
+  deallocate_buffer(aes_dst_uid);
+  deallocate_buffer(aes_key_uid);
 
   return result;
 }
 
+//---
+
 int _sceSblSsMgrHMACSHA1WithKeygenForDriverProxy(sceSblSsMgrHMACSHA1WithKeygenForDriverProxy_args* args)
 {
+  FILE_GLOBAL_WRITE_LEN("_sceSblSsMgrHMACSHA1WithKeygenForDriverProxy\n");
+
   //copy arguments to kernel
   sceSblSsMgrHMACSHA1WithKeygenForDriverProxy_args kargs;
   int res0 = ksceKernelMemcpyUserToKernel(&kargs, (uintptr_t)args, sizeof(sceSblSsMgrHMACSHA1WithKeygenForDriverProxy_args));
   if(res0 < 0)
-    return -1;
-
-  //check arguments
-  if(kargs.src == 0)
-  return -1;
-
-  if(kargs.dst == 0)
-    return -1;
-
-  if(kargs.size == 0)
-    return -1;
-
-  if(kargs.key == 0)
-    return -1;
-
-  if(kargs.iv != 0)
-  return -1;
-
-  if(kargs.mask_enable != 1)
-  return -1;
-
-  if(kargs.command_bit != 0)
-    return -1;
-
-  //allocate source buffer
-  SceUID aes_src_uid = ksceKernelAllocMemBlock("aes_src", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.size, NULL);
-  if(aes_src_uid < 0)
   {
+    snprintf(sprintfBuffer, 256, "failed to ksceKernelMemcpyUserToKernel : %x\n", res0);
+    FILE_GLOBAL_WRITE_LEN(sprintfBuffer);
     return -1;
   }
 
-  void* aes_src = 0;
+  //check arguments
+  if(kargs.src == 0 || kargs.dst == 0 || kargs.size == 0 || kargs.key == 0 || kargs.iv != 0 || kargs.mask_enable != 1 || kargs.command_bit != 0)
+  {
+    FILE_GLOBAL_WRITE_LEN("Invalid arguments\n");
+    return -1;
+  }
 
-  int res1 = ksceKernelGetMemBlockBase(aes_src_uid, &aes_src);
-  if(res1 < 0)
+  //allocate source buffer
+  SceUID aes_src_uid = -1;
+  unsigned char* aes_src = 0;
+  if(allocate_buffer("aes_src", kargs.size, &aes_src_uid, &aes_src) < 0)
   {
     return -1;
   }
 
   //allocate dest buffer
-  SceUID aes_dst_uid = ksceKernelAllocMemBlock("aes_dst", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.size, NULL);
-  if(aes_dst_uid < 0)
+  SceUID aes_dst_uid = -1;
+  unsigned char* aes_dst = 0;
+  if(allocate_buffer("aes_dst", kargs.size, &aes_dst_uid, &aes_dst) < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid);
-    return -1;
-  }
-
-  void* aes_dst = 0;
-
-  int res2 = ksceKernelGetMemBlockBase(aes_dst_uid, &aes_dst);
-  if(res2 < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid);
-    return -1;
-  }
-
-  //allocate key buffer
-  SceUID aes_key_uid = ksceKernelAllocMemBlock("aes_key", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, 0x20, NULL);
-  if(aes_key_uid < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid);
-    return -1;
-  }
-
-  void* aes_key = 0;
-
-  int res3 = ksceKernelGetMemBlockBase(aes_key_uid, &aes_key);
-  if(res3 < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid);
+    deallocate_buffer(aes_src_uid);
     return -1;
   }
 
@@ -731,15 +640,19 @@ int _sceSblSsMgrHMACSHA1WithKeygenForDriverProxy(sceSblSsMgrHMACSHA1WithKeygenFo
   int res5 = ksceKernelMemcpyUserToKernel(aes_src, (uintptr_t)kargs.src, kargs.size);
   if(res5 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);    
     return -1;
   }
+
+  unsigned char aes_key[0x20] = {0};
 
   //copy key to kernel
   int res6 = ksceKernelMemcpyUserToKernel(aes_key, (uintptr_t)kargs.key, 0x20);
   if(res6 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
     return -1;
   }
 
@@ -747,7 +660,8 @@ int _sceSblSsMgrHMACSHA1WithKeygenForDriverProxy(sceSblSsMgrHMACSHA1WithKeygenFo
   int result = sceSblSsMgrHMACSHA1WithKeygenForDriverProxy(aes_src, aes_dst, kargs.size, aes_key, 0, kargs.key_id, kargs.mask_enable, kargs.command_bit);
   if(result < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
     return -1;
   }
 
@@ -755,95 +669,65 @@ int _sceSblSsMgrHMACSHA1WithKeygenForDriverProxy(sceSblSsMgrHMACSHA1WithKeygenFo
   int res8 = ksceKernelMemcpyKernelToUser((uintptr_t)kargs.dst, aes_dst, kargs.size);
   if(res8 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
     return -1;
   }
 
   //deallocate memblocks
-  ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+  deallocate_buffer(aes_src_uid);
+  deallocate_buffer(aes_dst_uid);
 
   return result; 
 }
 
+//---
+
 int _sceSblSsMgrAESCMACWithKeygenForDriverProxy(sceSblSsMgrAESCMACWithKeygenForDriverProxy_args* args)
 {
+  FILE_GLOBAL_WRITE_LEN("_sceSblSsMgrAESCMACWithKeygenForDriverProxy\n");
+
   //copy arguments to kernel
   sceSblSsMgrAESCMACWithKeygenForDriverProxy_args kargs;
   int res0 = ksceKernelMemcpyUserToKernel(&kargs, (uintptr_t)args, sizeof(sceSblSsMgrAESCMACWithKeygenForDriverProxy_args));
   if(res0 < 0)
-    return -1;
-
-  //check arguments
-  if(kargs.src == 0)
-    return -1;
-
-  if(kargs.dst == 0)
-    return -1;
-
-  if(kargs.size == 0)
-    return -1;
-
-  if(kargs.key == 0)
-    return -1;
-
-  if(kargs.key_size == 0)
-    return -1;
-
-  if(kargs.iv != 0)
-    return -1;
-
-  if(kargs.mask_enable != 1)
-    return -1;
-
-  if(kargs.command_bit != 0)
-    return -1;
-
-  //allocate source buffer
-  SceUID aes_src_uid = ksceKernelAllocMemBlock("aes_src", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.size, NULL);
-  if(aes_src_uid < 0)
   {
+    snprintf(sprintfBuffer, 256, "failed to ksceKernelMemcpyUserToKernel : %x\n", res0);
+    FILE_GLOBAL_WRITE_LEN(sprintfBuffer);
     return -1;
   }
 
-  void* aes_src = 0;
+  //check arguments
+  if(kargs.src == 0 || kargs.dst == 0 || kargs.size == 0 || kargs.key == 0 || kargs.key_size == 0 || kargs.iv != 0 || kargs.mask_enable != 1 || kargs.command_bit != 0)
+  {
+    FILE_GLOBAL_WRITE_LEN("Invalid arguments\n");
+    return -1;
+  }
 
-  int res1 = ksceKernelGetMemBlockBase(aes_src_uid, &aes_src);
-  if(res1 < 0)
+  //allocate source buffer
+  SceUID aes_src_uid = -1;
+  unsigned char* aes_src = 0;
+  if(allocate_buffer("aes_src", kargs.size, &aes_src_uid, &aes_src) < 0)
   {
     return -1;
   }
 
   //allocate dest buffer
-  SceUID aes_dst_uid = ksceKernelAllocMemBlock("aes_dst", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.size, NULL);
-  if(aes_dst_uid < 0)
+  SceUID aes_dst_uid = -1;
+  unsigned char* aes_dst = 0;
+  if(allocate_buffer("aes_dst", kargs.size, &aes_dst_uid, &aes_dst) < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid);
-    return -1;
-  }
-
-  void* aes_dst = 0;
-
-  int res2 = ksceKernelGetMemBlockBase(aes_dst_uid, &aes_dst);
-  if(res2 < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid);
+    deallocate_buffer(aes_src_uid);
     return -1;
   }
 
   //allocate key buffer
-  SceUID aes_key_uid = ksceKernelAllocMemBlock("aes_key", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, kargs.key_size / 8, NULL);
-  if(aes_key_uid < 0)
+  SceUID aes_key_uid = -1;
+  unsigned char* aes_key = 0;
+  if(allocate_buffer("aes_key", (kargs.key_size / 8), &aes_key_uid, &aes_key) < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid);
-    return -1;
-  }
-
-  void* aes_key = 0;
-
-  int res3 = ksceKernelGetMemBlockBase(aes_key_uid, &aes_key);
-  if(res3 < 0)
-  {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
     return -1;
   }
 
@@ -851,7 +735,9 @@ int _sceSblSsMgrAESCMACWithKeygenForDriverProxy(sceSblSsMgrAESCMACWithKeygenForD
   int res5 = ksceKernelMemcpyUserToKernel(aes_src, (uintptr_t)kargs.src, kargs.size);
   if(res5 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -859,7 +745,9 @@ int _sceSblSsMgrAESCMACWithKeygenForDriverProxy(sceSblSsMgrAESCMACWithKeygenForD
   int res6 = ksceKernelMemcpyUserToKernel(aes_key, (uintptr_t)kargs.key, kargs.key_size / 8);
   if(res6 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -867,7 +755,9 @@ int _sceSblSsMgrAESCMACWithKeygenForDriverProxy(sceSblSsMgrAESCMACWithKeygenForD
   int result = sceSblSsMgrAESCMACWithKeygenForDriverProxy(aes_src, aes_dst, kargs.size, aes_key, kargs.key_size, 0, kargs.key_id, kargs.mask_enable, kargs.command_bit);
   if(result < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
@@ -875,12 +765,16 @@ int _sceSblSsMgrAESCMACWithKeygenForDriverProxy(sceSblSsMgrAESCMACWithKeygenForD
   int res8 = ksceKernelMemcpyKernelToUser((uintptr_t)kargs.dst, aes_dst, kargs.size);
   if(res8 < 0)
   {
-    ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+    deallocate_buffer(aes_src_uid);
+    deallocate_buffer(aes_dst_uid);
+    deallocate_buffer(aes_key_uid);
     return -1;
   }
 
   //deallocate memblocks
-  ksceKernelFreeMemBlock(aes_src_uid); ksceKernelFreeMemBlock(aes_dst_uid); ksceKernelFreeMemBlock(aes_key_uid);
+  deallocate_buffer(aes_src_uid);
+  deallocate_buffer(aes_dst_uid);
+  deallocate_buffer(aes_key_uid);
 
   return result;
 }
@@ -889,7 +783,7 @@ int _sceSblSsMgrAESCMACWithKeygenForDriverProxy(sceSblSsMgrAESCMACWithKeygenForD
 
 int module_start(SceSize argc, const void *args)
 {  
-   FILE_GLOBAL_WRITE_LEN("Loaded dmac5 kernel driver");
+   FILE_GLOBAL_WRITE_LEN("Loaded dmac5 kernel driver\n");
 
    initialize_functions();
 
