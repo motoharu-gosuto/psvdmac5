@@ -94,7 +94,7 @@ typedef struct command_4_request
   int mask_enable;
   int command_bit;
 
-  unsigned char data[]; // src, key, iv
+  unsigned char data[]; // src, key
 
 } command_4_request;
 
@@ -118,7 +118,7 @@ typedef struct command_5_request
   int mask_enable;
   int command_bit;
 
-  unsigned char data[]; // src, key, iv
+  unsigned char data[]; // src, key
 
 } command_5_request;
 
