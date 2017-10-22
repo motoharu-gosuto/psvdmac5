@@ -88,12 +88,16 @@ int main(int argc, char* argv[])
    //Dmac5ExecuteCommand1(dmac5_socket);
 
    test_aes_ecb(dmac5_socket);
+   std::cout << "test_aes_ecb complete" << std::endl;
 
    test_aes_cbc(dmac5_socket);
+   std::cout << "test_aes_cbc complete" << std::endl;
 
    test_hmac_sha1(dmac5_socket);
+   std::cout << "test_hmac_sha1 complete" << std::endl;
 
    test_aes_cmac(dmac5_socket);
+   std::cout << "test_aes_cmac complete" << std::endl;
 
    if(dmac5::deinitialize_dmac5_proxy_connection(dmac5_socket) < 0)
       return - 1;
