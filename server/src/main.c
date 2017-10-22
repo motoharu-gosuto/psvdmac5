@@ -130,6 +130,70 @@ void deinit_net()
   }
 }
 
+int send_data(char* src, int size)
+{
+  int bytesToSend = size;
+  int bytesWereSend = 0;
+  while(bytesWereSend != bytesToSend)
+  {
+     int sendLen = sceNetSend(_cli_sock, src + bytesWereSend, bytesToSend - bytesWereSend, 0);
+     if(sendLen <= 0)
+     {
+        psvDebugScreenPrintf("psvdmac5: failed to send data\n");
+        return - 1;
+     }
+     
+     bytesWereSend = bytesWereSend + sendLen;
+  }
+  return 0;
+}
+
+int recv_data(char* dest, int size)
+{
+  int bytesToReceive = size;
+  int bytesWereReceived = 0;
+  while(bytesWereReceived != bytesToReceive)
+  {
+     int recvLen = sceNetRecv(_cli_sock, dest + bytesWereReceived, bytesToReceive - bytesWereReceived, 0);
+     if(recvLen <= 0)
+     {
+       psvDebugScreenPrintf("psvdmac5: failed to receive data\n");
+       return - 1;
+     }
+     bytesWereReceived = bytesWereReceived + recvLen;
+  }
+  return 0;
+}
+
+int allocate_buffer(char* name, int size, SceUID* uid, char** dest)
+{
+   *uid = sceKernelAllocMemBlock(name, SCE_KERNEL_MEMBLOCK_TYPE_USER_RW, size, 0);
+   if(*uid < 0)
+   {
+     psvDebugScreenPrintf("psvdmac5: failed to allocate buffer\n");
+     return -1;
+   }
+
+   int mem_block_res = sceKernelGetMemBlockBase(*uid, (void**)dest);
+   if(mem_block_res < 0)
+   {
+     psvDebugScreenPrintf("psvdmac5: failed to get buffer\n");
+     return - 1;
+   }
+
+   return 0;
+}
+
+int deallocate_buffer(SceUID uid)
+{
+  if(sceKernelFreeMemBlock(uid) < 0)
+  {
+    psvDebugScreenPrintf("psvdmac5: failed to deallocate buffer\n");
+    return - 1;
+  }
+  return 0;
+}
+
 #define DMAC5_COMMAND_PING 0
 #define DMAC5_COMMAND_TERM 1
 #define DMAC5_COMMAND_AESECB 2
@@ -286,35 +350,58 @@ int handle_command_1()
   return sceNetSend(_cli_sock, &resp, sizeof(command_1_response), 0);
 }
 
-int handle_command_2(command_2_request* req)
+int handle_command_2(command_2_request* req, char* data)
 {
+  //allocate buffer
+  SceUID dest_uid;
+  char* dest_buffer = 0;
+  if(allocate_buffer("dest", req->size, &dest_uid, &dest_buffer) < 0)
+  {
+    psvDebugScreenPrintf("psvdmac5: failed to allocate dest buffer\n");
+    return -1;
+  }
+
+  //initialize args
   sceSblSsMgrAESECBWithKeygenForDriverProxy_args args;
-  args.src = 0;
-  args.dst = 0;
+  args.src = data;
+  args.dst = dest_buffer;
   args.size = req->size;
-  args.key = 0;
+  args.key = data + req->size;
   args.key_size = req->key_size;
   args.key_id = req->key_id;
   args.mask_enable = req->mask_enable;
 
-  //TODO: src, key should be pointed to req.data
-  //TODO: dst should be allocated from heap and then sent in response
-  
+  //execute kernel proxy function
   command_2_response resp;
 
   if(req->encrypt)
-  {
     resp.vita_err = _sceSblSsMgrAESECBEncryptWithKeygenForDriverProxy(&args);
-  }
   else
-  {
     resp.vita_err = _sceSblSsMgrAESECBDecryptWithKeygenForDriverProxy(&args);
+
+  //exit if proxy call failed
+  if(resp.vita_err < 0)
+  {
+    deallocate_buffer(dest_uid);
+    return -1;
   }
+
+  //send response to client - base data
+  if(send_data(((char*)&resp), sizeof(command_2_response)) < 0)
+    return -1;
+
+  //send additional data
+  if(send_data(dest_buffer, req->size) < 0)
+    return -1;
+
+  //deallocate buffer
+  if(deallocate_buffer(dest_uid) < 0)
+    return -1;
 
   return 0;
 }
 
-int handle_command_3(command_3_request* req)
+int handle_command_3(command_3_request* req, char* data)
 {
   sceSblSsMgrAESCBCWithKeygenForDriverProxy_args args;
   args.src = 0;
@@ -343,7 +430,7 @@ int handle_command_3(command_3_request* req)
   return 0;
 }
 
-int handle_command_4(command_4_request* req)
+int handle_command_4(command_4_request* req, char* data)
 {
   sceSblSsMgrHMACSHA1WithKeygenForDriverProxy_args args;
   args.src = 0;
@@ -365,7 +452,7 @@ int handle_command_4(command_4_request* req)
   return 0;
 }
 
-int handle_command_5(command_5_request* req)
+int handle_command_5(command_5_request* req, char* data)
 {
   sceSblSsMgrAESCMACWithKeygenForDriverProxy_args args;
   args.src = 0;
@@ -384,6 +471,88 @@ int handle_command_5(command_5_request* req)
   command_5_response resp;
 
   resp.vita_err = _sceSblSsMgrAESCMACWithKeygenForDriverProxy(&args);
+
+  return 0;
+}
+
+//---
+
+int handle_command_2_base(int command)
+{
+  command_2_request recvBuffer;
+  recvBuffer.command = command;
+
+  //receive main data
+  int header_size = sizeof(command_2_request) - sizeof(int);
+  char* header_dest = ((char*)&recvBuffer) + sizeof(int);
+  if(recv_data(header_dest, header_size) < 0)
+    return -1;
+
+  //check arguments
+  if(recvBuffer.size == 0 || recvBuffer.key_size == 0 || recvBuffer.mask_enable != 1)
+  {
+    psvDebugScreenPrintf("psvdmac5: invalid args in command 2\n");
+    return -1;
+  }
+
+  //allocate data buffer
+  int data_size = recvBuffer.size + (recvBuffer.key_size / 8);
+  char* data_dest = 0;
+  SceUID data_uid = -1;
+  
+  if(allocate_buffer("data", data_size, &data_uid, &data_dest) < 0)
+    return -1;
+  
+  //receive additional data
+  if(recv_data(data_dest, data_size) < 0)
+    return -1;
+
+  //handle command
+  if(handle_command_2(&recvBuffer, data_dest) < 0)
+  {
+    psvDebugScreenPrintf("psvdmac5: failed to handle command 2\n");
+    return -1;
+  }
+
+  //deallocate buffer
+  if(deallocate_buffer(data_uid) < 0)
+    return -1;
+
+  return 0;
+}
+
+int handle_command_3_base(int command)
+{
+  command_3_request recvBuffer;
+  recvBuffer.command = command;
+
+  //TODO: additional data should be read before handling command
+
+  handle_command_3(&recvBuffer, 0);
+
+  return 0;
+}
+
+int handle_command_4_base(int command)
+{
+  command_4_request recvBuffer;
+  recvBuffer.command = command;
+
+  //TODO: additional data should be read before handling command
+
+  handle_command_4(&recvBuffer, 0);
+
+  return 0;
+}
+
+int handle_command_5_base(int command)
+{
+  command_5_request recvBuffer;
+  recvBuffer.command = command;
+
+  //TODO: additional data should be read before handling command
+
+  handle_command_5(&recvBuffer, 0);
 
   return 0;
 }
@@ -418,42 +587,26 @@ void receive_commands()
       return;
     case DMAC5_COMMAND_AESECB:
       {
-        command_2_request recvBuffer;
-        recvBuffer.command = command;
-
-        //TODO: additional data should be read before handling command
-
-        handle_command_2(&recvBuffer);
+        if(handle_command_2_base(command) < 0)
+          return;
       }
       break;
     case DMAC5_COMMAND_AESCBC:
       {
-        command_3_request recvBuffer;
-        recvBuffer.command = command;
-
-        //TODO: additional data should be read before handling command
-
-        handle_command_3(&recvBuffer);
+        if(handle_command_3_base(command) < 0)
+          return;
       }
       break;
     case DMAC5_COMMAND_HMACSHA1:
       {
-        command_4_request recvBuffer;
-        recvBuffer.command = command;
-
-        //TODO: additional data should be read before handling command
-
-        handle_command_4(&recvBuffer);
+        if(handle_command_4_base(command) < 0)
+          return;
       }
       break;
     case DMAC5_COMMAND_AESCMAC:
       {
-        command_5_request recvBuffer;
-        recvBuffer.command = command;
-
-        //TODO: additional data should be read before handling command
-
-        handle_command_5(&recvBuffer);
+        if(handle_command_5_base(command) < 0)
+          return;
       }
       break;
     default:
